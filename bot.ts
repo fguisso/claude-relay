@@ -418,6 +418,21 @@ bot.on("message:forum_topic_closed", async (ctx) => {
   saveState()
 })
 
+// /stop — delete topic and clean up session
+bot.command("stop", async (ctx) => {
+  const topicId = ctx.message.message_thread_id
+  if (!topicId) return
+
+  sessions.delete(topicId)
+  saveState()
+
+  try {
+    await ctx.api.deleteForumTopic(ctx.chat.id, topicId)
+  } catch (err: any) {
+    console.error(`Failed to delete topic ${topicId}:`, err)
+  }
+})
+
 // /sessions — list active sessions
 bot.command("sessions", async (ctx) => {
   if (sessions.size === 0) return ctx.reply("Nenhuma sessao ativa.")
