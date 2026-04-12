@@ -20,19 +20,82 @@ Session state (topic → session ID mapping) is persisted in `state.json` and su
 - **Auth guard** — only responds to a single authorized Telegram user ID
 - **Concurrency control** — one Claude process per topic at a time
 
-## Setup
+## Installation
 
-Requires [Bun](https://bun.sh) and [Claude Code](https://docs.anthropic.com/en/docs/claude-code) installed and authenticated.
+### Prerequisites
+
+- [Bun](https://bun.sh) (runtime)
+- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) CLI installed and authenticated
+- A Telegram bot token from [@BotFather](https://t.me/BotFather)
+- Your Telegram user ID (you can get it from [@userinfobot](https://t.me/userinfobot))
+
+### From source
 
 ```bash
+git clone https://github.com/roziscoding/claude-relay.git
+cd claude-relay
 bun install
 ```
 
+Create a `.env` file or export the variables directly:
+
 ```bash
-TELEGRAM_BOT_TOKEN=your_token AUTHORIZED_USER_ID=your_telegram_id bun run bot.ts
+export TELEGRAM_BOT_TOKEN=your_token
+export AUTHORIZED_USER_ID=your_telegram_id
 ```
 
-## systemd
+Run:
+
+```bash
+bun run bot.ts
+```
+
+### Docker
+
+Build the image:
+
+```bash
+docker build -t claude-relay .
+```
+
+Run the container. You need to mount your Claude Code config directory so the CLI is authenticated inside the container:
+
+```bash
+docker run -d \
+  --name claude-relay \
+  -e TELEGRAM_BOT_TOKEN=your_token \
+  -e AUTHORIZED_USER_ID=your_telegram_id \
+  -e ANTHROPIC_API_KEY=your_api_key \
+  -v claude-relay-state:/app/state \
+  claude-relay
+```
+
+### Docker Compose
+
+```yaml
+# compose.yml
+services:
+  claude-relay:
+    build: .
+    restart: always
+    environment:
+      - TELEGRAM_BOT_TOKEN=your_token
+      - AUTHORIZED_USER_ID=your_telegram_id
+      - ANTHROPIC_API_KEY=your_api_key
+    volumes:
+      - state:/app/state
+
+volumes:
+  state:
+```
+
+```bash
+docker compose up -d
+```
+
+### systemd
+
+If you prefer running it directly on the host as a user service:
 
 ```ini
 [Unit]
@@ -52,6 +115,8 @@ RestartSec=5
 WantedBy=default.target
 ```
 
+Enable with `loginctl enable-linger` so it runs without an active login session.
+
 ## Security
 
-The bot runs Claude with `--dangerously-skip-permissions`, which means Claude can execute arbitrary commands on the host. The auth middleware restricts access to a single Telegram user ID. This is a personal tool, not intended for multi-user or public use.
+The bot runs Claude with `--dangerously-skip-permissions`, which means Claude can execute arbitrary commands on the host (or inside the container). The auth middleware restricts access to a single Telegram user ID. This is a personal tool, not intended for multi-user or public use.
