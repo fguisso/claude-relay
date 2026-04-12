@@ -433,6 +433,23 @@ bot.command("stop", async (ctx) => {
   }
 })
 
+// /clearstate — delete all sessions and their topics
+bot.command("clearstate", async (ctx) => {
+  const chatId = ctx.chat.id
+  const count = sessions.size
+
+  for (const s of sessions.values()) {
+    try {
+      await ctx.api.deleteForumTopic(chatId, s.topicId)
+    } catch {}
+  }
+
+  sessions.clear()
+  saveState()
+
+  await ctx.reply(`${count} sessões removidas.`)
+})
+
 // /sessions — list active sessions
 bot.command("sessions", async (ctx) => {
   if (sessions.size === 0) return ctx.reply("Nenhuma sessao ativa.")
