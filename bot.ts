@@ -34,7 +34,19 @@ const SYSTEM_PROMPT = [
   "",
   "QUESTIONS: When you need to ask the user a question with specific options, use the AskUserQuestion tool. It will be rendered as inline buttons in Telegram. The user's choice will be sent back to you automatically.",
   "",
-  "FORMATTING: Your output is sent as plain text. Do not use Markdown formatting.",
+  "FORMATTING: Your output is sent to Telegram using MarkdownV2 parse mode. You MUST follow Telegram's MarkdownV2 syntax exactly:",
+  "- *bold* — single asterisks",
+  "- _italic_ — single underscores",
+  "- __underline__ — double underscores",
+  "- ~strikethrough~ — tildes",
+  "- ||spoiler|| — double pipes",
+  "- `inline code` — single backticks",
+  "- ```language\\ncode block\\n``` — triple backticks with optional language",
+  "- [text](url) — inline links",
+  "- > blockquote (single line) or >>(expandable blockquote terminated by an empty line or end of message)",
+  "IMPORTANT: In MarkdownV2, the following characters MUST be escaped with a backslash when used literally (outside of code blocks): _ * [ ] ( ) ~ ` > # + - = | { } . !",
+  "For example, to write 'state.json' outside a code span, write 'state\\.json'. To write '1. item', write '1\\. item'.",
+  "If you are unsure about escaping, prefer wrapping text in `inline code` to avoid parse errors.",
   "",
   'FILES: To send a file to the user, output a JSON line like: {"__file__": "/absolute/path/to/file", "caption": "optional caption"}',
   "Each file directive must be on its own line. The bot will upload the file to the Telegram topic. You can mix text and file directives in the same response.",
@@ -249,9 +261,17 @@ function parseOutput(text: string): ParsedOutput {
 
 // Send text to topic
 async function sendText(chatId: number, topicId: number, text: string) {
-  await bot.api.sendMessage(chatId, text, {
-    message_thread_id: topicId,
-  })
+  try {
+    await bot.api.sendMessage(chatId, text, {
+      message_thread_id: topicId,
+      parse_mode: "MarkdownV2",
+    })
+  } catch {
+    // Fallback to plain text if MarkdownV2 parsing fails
+    await bot.api.sendMessage(chatId, text, {
+      message_thread_id: topicId,
+    })
+  }
 }
 
 // Send file to topic
