@@ -1,0 +1,13 @@
+services:
+  claude-relay:
+    build: .
+    restart: always
+    environment:
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - AUTHORIZED_USER_ID=${AUTHORIZED_USER_ID}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+    volumes:
+      - state:/app/state
+
+volumes:
+  state:
