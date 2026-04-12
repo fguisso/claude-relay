@@ -28,6 +28,18 @@ Session state (topic → session ID mapping) is persisted in `state.json` and su
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) CLI installed and authenticated
 - A Telegram bot token from [@BotFather](https://t.me/BotFather)
 - Your Telegram user ID (you can get it from [@userinfobot](https://t.me/userinfobot))
+- **Topics enabled** on your bot (see below)
+
+### Enabling topics
+
+The bot uses Telegram message topics to keep separate Claude sessions. You need to enable this in BotFather:
+
+1. Open [@BotFather](https://t.me/BotFather) on Telegram
+2. Send `/mybots` and select your bot
+3. Go to **Bot Settings** → **Topics in Private Chats**
+4. Enable it
+
+This is done through BotFather's mini app interface, not via commands. Once enabled, you'll be able to create topics in your private chat with the bot, and each topic will map to an independent Claude session.
 
 ### From source
 
