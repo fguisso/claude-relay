@@ -11,7 +11,7 @@
 
 import { Bot, type Context, InlineKeyboard } from "grammy"
 import { autoRetry } from "@grammyjs/auto-retry"
-import { readFileSync, writeFileSync, existsSync } from "fs"
+import { readFileSync, writeFileSync, existsSync, readdirSync, statSync } from "fs"
 import { spawn } from "bun"
 import { resolve, dirname, basename } from "path"
 import { InputFile } from "grammy"
@@ -26,6 +26,7 @@ if (!TOKEN) {
 
 const AUTHORIZED_USER = Number(process.env.AUTHORIZED_USER_ID || "16715013")
 const STATE_FILE = resolve(dirname(import.meta.path), "state.json")
+const PROJECTS_DIR = process.env.PROJECTS_DIR || ""
 
 const SYSTEM_PROMPT = [
   "You are running inside a Telegram relay bot. Your text output is sent directly to a Telegram forum topic.",
@@ -104,6 +105,7 @@ interface Session {
   chatId: number
   claudeSessionId: string | null
   busy: boolean
+  cwd?: string
 }
 
 interface AskQuestion {
@@ -128,8 +130,8 @@ function loadState() {
 }
 
 function saveState() {
-  const data = [...sessions.values()].map(({ topicId, chatId, claudeSessionId }) => ({
-    topicId, chatId, claudeSessionId,
+  const data = [...sessions.values()].map(({ topicId, chatId, claudeSessionId, cwd }) => ({
+    topicId, chatId, claudeSessionId, cwd,
   }))
   writeFileSync(STATE_FILE, JSON.stringify(data, null, 2))
 }
@@ -139,6 +141,7 @@ function saveState() {
 async function runClaude(
   prompt: string,
   sessionId?: string | null,
+  cwd?: string,
 ): Promise<{ result: string; sessionId: string; questions: AskQuestion[] }> {
   const args = [
     "claude", "-p", prompt,
@@ -150,7 +153,7 @@ async function runClaude(
     args.splice(3, 0, "--resume", sessionId)
   }
 
-  const proc = spawn(args, { stdout: "pipe", stderr: "pipe" })
+  const proc = spawn(args, { stdout: "pipe", stderr: "pipe", cwd: cwd || undefined })
 
   // Collect stderr
   let stderrOutput = ""
@@ -312,7 +315,7 @@ function handleMessage(ctx: Context, session: Session, prompt: string) {
     const thinking = await thinkingPromise
 
     try {
-      const claude = await runClaude(prompt, session.claudeSessionId)
+      const claude = await runClaude(prompt, session.claudeSessionId, session.cwd)
 
       session.claudeSessionId = claude.sessionId
       saveState()
@@ -370,6 +373,52 @@ function handleMessage(ctx: Context, session: Session, prompt: string) {
 // Callback query handler — user clicked an inline button
 bot.on("callback_query:data", async (ctx) => {
   const data = ctx.callbackQuery.data
+
+  // Handle project selection
+  if (data.startsWith("proj:")) {
+    const folderName = data.slice(5)
+    const projectPath = resolve(PROJECTS_DIR, folderName)
+
+    if (!existsSync(projectPath)) {
+      await ctx.answerCallbackQuery({ text: "Pasta nao encontrada" })
+      return
+    }
+
+    const chatId = ctx.callbackQuery.message?.chat.id
+    if (!chatId) {
+      await ctx.answerCallbackQuery({ text: "Erro: chat nao encontrado" })
+      return
+    }
+
+    try {
+      const topic = await ctx.api.createForumTopic(chatId, folderName)
+      const session: Session = {
+        topicId: topic.message_thread_id,
+        chatId,
+        claudeSessionId: null,
+        busy: false,
+        cwd: projectPath,
+      }
+      sessions.set(topic.message_thread_id, session)
+      saveState()
+
+      await ctx.editMessageText(`Projeto *${folderName}* aberto\\!`, {
+        parse_mode: "MarkdownV2",
+      }).catch(() => {})
+      await ctx.answerCallbackQuery()
+
+      await ctx.api.sendMessage(chatId, `Sessao iniciada em ${projectPath}`, {
+        message_thread_id: topic.message_thread_id,
+        parse_mode: undefined,
+      })
+    } catch (err: any) {
+      console.error(`Failed to create topic for project ${folderName}:`, err)
+      await ctx.answerCallbackQuery({ text: "Erro ao criar topic" })
+    }
+    return
+  }
+
+  // Handle AskUserQuestion responses
   if (!data.startsWith("ask:")) return
 
   const pending = pendingCallbacks.get(data)
@@ -460,6 +509,39 @@ bot.command("sessions", async (ctx) => {
     lines.push(`Topic ${s.topicId}: ${status}`)
   }
   await ctx.reply(lines.join("\n"))
+})
+
+// /projects — list project folders and create topic on selection
+bot.command("projects", async (ctx) => {
+  if (!PROJECTS_DIR) {
+    await ctx.reply("PROJECTS_DIR nao configurado.")
+    return
+  }
+
+  if (!existsSync(PROJECTS_DIR)) {
+    await ctx.reply("Diretorio PROJECTS_DIR nao encontrado.")
+    return
+  }
+
+  const entries = readdirSync(PROJECTS_DIR).filter((name) => {
+    try {
+      return statSync(resolve(PROJECTS_DIR, name)).isDirectory()
+    } catch {
+      return false
+    }
+  }).sort()
+
+  if (entries.length === 0) {
+    await ctx.reply("Nenhuma pasta encontrada em PROJECTS_DIR.")
+    return
+  }
+
+  const kb = new InlineKeyboard()
+  for (const name of entries) {
+    kb.text(name, `proj:${name}`).row()
+  }
+
+  await ctx.reply("Escolha um projeto:", { reply_markup: kb })
 })
 
 // /resume <session_id> — attach an existing Claude session to this topic

@@ -2,12 +2,16 @@ services:
   claude-relay:
     build: .
     restart: always
+    env_file: .env
     environment:
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - AUTHORIZED_USER_ID=${AUTHORIZED_USER_ID}
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - CLAUDE_CODE_OAUTH_TOKEN=${CLAUDE_CODE_OAUTH_TOKEN}
+      - PROJECTS_DIR=${PROJECTS_DIR}
+      - IS_SANDBOX=1
     volumes:
       - state:/app/state
+      - /root/sync-repos:/projects
 
 volumes:
   state:
